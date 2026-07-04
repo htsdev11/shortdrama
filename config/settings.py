@@ -25,9 +25,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-%h@joh-8^rfrj@dhfu0t4l)0(x4w(-*xvxp$%)thg!6=ch%2)a'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# DEBUG = True
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = []
+DEBUG = False
+
+ALLOWED_HOSTS = [
+    "*"
+    "www.reelio.ddd-remote.com",
+    "reelio.ddd-remote.com",
+]
 
 
 # Application definition
@@ -137,6 +144,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 # STATIC_URL = 'static/'
+MEDIA_URL = '/media/'
+
+MEDIA_ROOT = BASE_DIR / 'media'
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
