@@ -34,6 +34,8 @@ class AllShortDramaView(APIView):
                     queryset=ShortDramaEpisode.objects.only(
                         "episode_number",
                         "play_url",
+                        "thumbnail",
+                        "duration"
                     ).order_by("episode_number"),
                     to_attr="ordered_episodes",
                 )
