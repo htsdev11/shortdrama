@@ -6,7 +6,26 @@ from .models import (
 )
 
 
+# class ShortDramaListSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = ShortDrama
+#         fields = (
+#             "id",
+#             "subject_id",
+#             "title",
+#             "cover",
+#             "tags",
+#             "total_episodes",
+#             "total_views",
+#             "description",
+#             "slug",
+#         )
+
+
 class ShortDramaListSerializer(serializers.ModelSerializer):
+    thumbnail = serializers.SerializerMethodField()
+    first_episode = serializers.SerializerMethodField()
+
     class Meta:
         model = ShortDrama
         fields = (
@@ -14,13 +33,31 @@ class ShortDramaListSerializer(serializers.ModelSerializer):
             "subject_id",
             "title",
             "cover",
+            "thumbnail",
             "tags",
             "total_episodes",
+            "first_episode",
             "total_views",
             "description",
             "slug",
         )
 
+    def get_thumbnail(self, obj):
+        return (obj.cover or {}).get("url")
+
+    def get_first_episode(self, obj):
+        episodes = getattr(obj, "ordered_episodes", [])
+
+        if not episodes:
+            return None
+
+        ep = episodes[0]
+
+        return {
+            "episode_number": ep.episode_number,
+            "play_url": ep.play_url,
+
+        }
 
 class ShortDramaEpisodeSerializer(serializers.ModelSerializer):
     class Meta:

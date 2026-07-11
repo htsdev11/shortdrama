@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Change to project directory
+cd /home/nativesol/shortdrama || exit 1
+
+# Activate virtual environment
+source .venv/bin/activate
+
+# Run scraper
+python everyone_search_scraper.py
+
+# Deactivate virtual environment
+deactivate
