@@ -31,7 +31,7 @@ SECRET_KEY = 'django-insecure-%h@joh-8^rfrj@dhfu0t4l)0(x4w(-*xvxp$%)thg!6=ch%2)a
 DEBUG = False
 
 ALLOWED_HOSTS = [
-    "*"
+    "*",
     "www.reelio.ddd-remote.com",
     "reelio.ddd-remote.com",
 ]

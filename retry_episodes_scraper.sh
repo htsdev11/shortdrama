@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # Change to project directory
-cd /home/tayyab-saeed/PycharmProjects/shortdrama
+cd /home/nativesol/shortdrama || exit 1
+
 # Activate virtual environment
 source .venv/bin/activate
 
-# Run Retry Episodes scraper
+# Run scraper
 python retry_episodes_scraper.py
 
 # Deactivate virtual environment
