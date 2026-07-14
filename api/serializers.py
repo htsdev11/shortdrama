@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     ShortDrama,
     ShortDramaEpisode,
-    ShortDramaForyou
+    ShortDramaForyou, ShortDramaGenre, ShortDramaCountry
 )
 
 
@@ -21,10 +21,29 @@ from .models import (
 #             "slug",
 #         )
 
+class ShortDramaGenreSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShortDramaGenre
+        fields = (
+            "id",
+            "name",
+        )
+
+
+class ShortDramaCountrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShortDramaCountry
+        fields = (
+            "id",
+            "name",
+        )
+
 
 class ShortDramaListSerializer(serializers.ModelSerializer):
     # thumbnail = serializers.SerializerMethodField()
     first_episode = serializers.SerializerMethodField()
+    genres = ShortDramaGenreSerializer(many=True, read_only=True)
+    country = ShortDramaCountrySerializer(read_only=True)
 
     class Meta:
         model = ShortDrama
@@ -35,6 +54,8 @@ class ShortDramaListSerializer(serializers.ModelSerializer):
             "cover",
             # "thumbnail",
             "tags",
+            "genres",
+            "country",
             "total_episodes",
             "first_episode",
             "total_views",
@@ -79,6 +100,8 @@ class ShortDramaEpisodeSerializer(serializers.ModelSerializer):
 
 class ShortDramaDetailSerializer(serializers.ModelSerializer):
     episodes = ShortDramaEpisodeSerializer(many=True, read_only=True)
+    genres = ShortDramaGenreSerializer(many=True, read_only=True)
+    country = ShortDramaCountrySerializer(read_only=True)
 
     class Meta:
         model = ShortDrama
@@ -88,6 +111,8 @@ class ShortDramaDetailSerializer(serializers.ModelSerializer):
             "title",
             "cover",
             "tags",
+            "genres",
+            "country",
             "total_episodes",
             "total_views",
             "description",

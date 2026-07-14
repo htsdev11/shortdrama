@@ -1,5 +1,5 @@
 from django.core.cache import cache
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.shortcuts import render
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.function import BannerService
-from api.models import ShortDrama, ShortDramaForyou, ShortDramaEpisode
+from api.models import ShortDrama, ShortDramaForyou, ShortDramaEpisode, ShortDramaGenre, ShortDramaCountry
 from api.pagination import CustomPagination
 from api.serializers import ShortDramaListSerializer, ShortDramaDetailSerializer, ShortDramaForyouSerializer
 
@@ -278,3 +278,290 @@ class HomepageBannerAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class ShortDramaFiltersAPIView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    CACHE_TIMEOUT = 60 * 60 * 24  # 24 Hours
+
+    def get(self, request, *args, **kwargs):
+        # Genres
+        genres = cache.get("short_drama_genres")
+        if genres is None:
+            genres = list(
+                ShortDramaGenre.objects.filter(is_active=True)
+                .order_by("name")
+                .values("id", "name", "slug")
+            )
+            cache.set(
+                "short_drama_genres",
+                genres,
+                self.CACHE_TIMEOUT,
+            )
+
+        # Countries
+        countries = cache.get("short_drama_countries")
+        if countries is None:
+            countries = list(
+                ShortDramaCountry.objects.filter(is_active=True)
+                .order_by("name")
+                .values("id", "name", "code", "slug")
+            )
+            cache.set(
+                "short_drama_countries",
+                countries,
+                self.CACHE_TIMEOUT,
+            )
+
+        # Years
+        years = cache.get("short_drama_years")
+        if years is None:
+            years = [
+                d.year
+                for d in ShortDrama.objects.filter(
+                    is_active=True,
+                    release_date__isnull=False,
+                ).dates(
+                    "release_date",
+                    "year",
+                    order="DESC",
+                )
+            ]
+
+            cache.set(
+                "short_drama_years",
+                years,
+                self.CACHE_TIMEOUT,
+            )
+
+        return Response(
+            {
+                "status": "success",
+                "message": None,
+                "filters": [
+                    {
+                        "name": "genres",
+                        "data": genres,
+                    },
+                    {
+                        "name": "countries",
+                        "data": countries,
+                    },
+                    {
+                        "name": "years",
+                        "data": years,
+                    },
+                ],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+class ShortDramaGenreListView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        genres = (
+            ShortDramaGenre.objects
+            .filter(is_active=True)
+            .order_by("name")
+            .values("id", "name", "slug")
+        )
+
+        return Response({
+            "status": "success",
+            "count": len(genres),
+            "message": "Genres fetched successfully",
+            "data": genres,
+        })
+
+class ShortDramaCountryListView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        countries = (
+            ShortDramaCountry.objects
+            .filter(is_active=True)
+            .order_by("name")
+            .values("id", "name", "code", "slug")
+        )
+
+        return Response({
+            "status": "success",
+            "count": len(countries),
+            "message": "Countries fetched successfully",
+            "data": countries,
+        })
+
+class ShortDramaReleaseYearListView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        years = [
+            d.year
+            for d in ShortDrama.objects.filter(
+                is_active=True,
+                release_date__isnull=False,
+            ).dates("release_date", "year", order="DESC")
+        ]
+
+        return Response(
+            {
+                "status": "success",
+                "count": len(years),
+                "message": "Release years fetched successfully",
+                "data": years,
+            }
+        )
+
+class ShortDramaByGenreView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        genre = request.GET.get("genre")
+
+        if not genre:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Genre is required",
+                    "data": {},
+                },
+                status=400,
+            )
+
+        queryset = (
+            ShortDrama.objects.filter(
+                is_active=True,
+                genres__name__iexact=genre,
+            )
+            .prefetch_related("genres")
+            .select_related("country")
+            .distinct()
+            .order_by("-id")
+        )
+
+        paginator = CustomPagination()
+        page = paginator.paginate_queryset(queryset, request)
+
+        serializer = ShortDramaListSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+class ShortDramaByCountryView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        country = request.GET.get("country")
+
+        if not country:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Country is required",
+                    "data": {},
+                },
+                status=400,
+            )
+
+        queryset = (
+            ShortDrama.objects.filter(
+                is_active=True,
+                country__name__iexact=country,
+            )
+            .prefetch_related("genres")
+            .select_related("country")
+            .order_by("-id")
+        )
+
+        paginator = CustomPagination()
+        page = paginator.paginate_queryset(queryset, request)
+
+        serializer = ShortDramaListSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+class ShortDramaByReleaseYearView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        year = request.GET.get("year")
+
+        if not year:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Year is required",
+                    "data": {},
+                },
+                status=400,
+            )
+
+        queryset = (
+            ShortDrama.objects.filter(
+                is_active=True,
+                release_date__year=year,
+            )
+            .prefetch_related("genres")
+            .select_related("country")
+            .order_by("-id")
+        )
+
+        paginator = CustomPagination()
+        page = paginator.paginate_queryset(queryset, request)
+
+        serializer = ShortDramaListSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+class ShortDramaSortingFilters(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        category = request.query_params.get("category")
+        genre = request.query_params.get("genre")
+        country = request.query_params.get("country")
+        year = request.query_params.get("year")
+
+        filters = Q(is_active=True)
+
+        # Genre (ManyToMany)
+        if genre and genre != "All":
+            filters &= Q(genres__name__iexact=genre)
+
+        # Country (ForeignKey)
+        if country and country != "All":
+            filters &= Q(country__name__iexact=country)
+
+        # Release Year
+        if year and year != "All":
+            filters &= Q(release_date__year=year)
+
+        queryset = (
+            ShortDrama.objects
+            .filter(filters)
+            .prefetch_related("genres")
+            .select_related("country")
+            .distinct()
+            .order_by("-release_date", "-id")
+        )
+
+        if category == "top_picks":
+            queryset = queryset.order_by("-created_at")[:100]
+        else:
+            queryset = queryset.order_by("-release_date", "-id")
+
+        paginator = CustomPagination()
+        paginated_qs = paginator.paginate_queryset(queryset, request)
+
+        serializer = ShortDramaListSerializer(
+            paginated_qs,
+            many=True
+        )
+
+        return paginator.get_paginated_response(serializer.data)
