@@ -288,132 +288,147 @@
 #     print("Starting merged scraper...")
 #     scrape_all()
 
-
-import os
-import django
-import requests
-import re
-import json
-import time
-from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urlparse, parse_qs
-from datetime import datetime, timezone
-
-from django.utils.text import slugify
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-django.setup()
-
-from api.models import ShortDrama, ShortDramaEpisode, ShortDramaGenre, ShortDramaCountry
-
-# ---------------------------------------------
-# CONFIG
-# ---------------------------------------------
-MAX_PAGES = 3
-PER_PAGE = 20
-EPISODE_WORKERS = 2
-REQUEST_TIMEOUT = 20
-RETRY_LIMIT = 3
-DELAY_BETWEEN_EPISODES = 0.7
-DELAY_BETWEEN_DRAMAS = 10
-DELAY_BETWEEN_PAGES = 10
-
-
-# ---------------------------------------------
-# API
-# ---------------------------------------------
-BASE_URL = "https://h5-api.aoneroom.com/wefeed-h5api-bff/vskit/recommend-list"
-
-HEADERS = {
-    "Accept": "application/json",
-    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjQ1MjY2MDk2MjQyMTQyNjM2ODAsImF0cCI6MywiZXh0IjoiMTc4MjgxMTg4MiIsImV4cCI6MTc5MDU4Nzg4MiwiaWF0IjoxNzgyODExNTgyfQ.egBjX5cvZdoMmv0D_eTDZnnOzxIpL9Ua7A8l2EF5kq8",
-    "User-Agent": "Mozilla/5.0",
-    "Origin": "https://vskit.tv",
-    "Referer": "https://vskit.tv/",
-    "X-Client-Info": '{"timezone":"Asia/Karachi"}',
-    "X-Request-Lang": "en",
-    "X-Site-Domain": "https://vskit.tv"
-}
-
-
-# ---------------------------------------------
-# EPISODE SESSION
-# ---------------------------------------------
-SESSION_HEADERS = {
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:152.0) "
-        "Gecko/20100101 Firefox/152.0"
-    ),
-    "Origin": "https://vskit.tv",
-    "RSC": "1",
-}
-
-session = requests.Session()
-session.headers.update(SESSION_HEADERS)
-
-COOKIE_STRING = """
-PASTE_FULL_RAW_COOKIE_HERE
-"""
-
-COOKIE_STRING = COOKIE_STRING.replace("…", "")
-COOKIE_STRING = COOKIE_STRING.encode("ascii", "ignore").decode()
-
-for item in COOKIE_STRING.strip().split("; "):
-    if "=" in item:
-        key, value = item.split("=", 1)
-        session.cookies.set(key, value)
-
-
-# ---------------------------------------------
-# FETCH DRAMA PAGE
-# ---------------------------------------------
-def fetch_page(page):
-    params = {
-        "page": page,
-        "perPage": PER_PAGE,
-        "novelType": 3
-    }
-
-    response = requests.get(
-        BASE_URL,
-        headers=HEADERS,
-        params=params,
-        timeout=30
-    )
-
-    if response.status_code != 200:
-        print(f"Failed page {page}")
-        return []
-
-    return response.json().get("data", {}).get("list", [])
-
-
-# ---------------------------------------------
-# SAVE DRAMA
-# ---------------------------------------------
-def save_drama(drama_data):
-    drama, created = ShortDrama.objects.update_or_create(
-        subject_id=drama_data.get("subjectId"),
-        defaults={
-            "title": drama_data.get("title"),
-            "slug": drama_data.get("subjectSeoKey"),
-            "cover": drama_data.get("cover") or {},
-            "tags": drama_data.get("tags", []),
-            "total_episodes": drama_data.get("totalEpisode"),
-            "total_views": drama_data.get("totalViews"),
-            "description": drama_data.get("description"),
-            "is_active": True,
-        }
-    )
-
-    return drama
-
-
-# ---------------------------------------------
-# EXTRACT EPISODE
-# ---------------------------------------------
+#
+# import os
+# import django
+# import requests
+# import re
+# import json
+# import time
+# from concurrent.futures import ThreadPoolExecutor
+# from urllib.parse import urlparse, parse_qs
+# from datetime import datetime, timezone
+#
+# from django.utils.text import slugify
+#
+# os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+# django.setup()
+#
+# from api.models import ShortDrama, ShortDramaEpisode, ShortDramaGenre, ShortDramaCountry
+#
+# # ---------------------------------------------
+# # CONFIG
+# # ---------------------------------------------
+# MAX_PAGES = 3
+# PER_PAGE = 20
+# EPISODE_WORKERS = 2
+# REQUEST_TIMEOUT = 20
+# RETRY_LIMIT = 3
+# DELAY_BETWEEN_EPISODES = 0.7
+# DELAY_BETWEEN_DRAMAS = 10
+# DELAY_BETWEEN_PAGES = 10
+#
+#
+# # ---------------------------------------------
+# # API
+# # ---------------------------------------------
+# BASE_URL = "https://h5-api.aoneroom.com/wefeed-h5api-bff/vskit/recommend-list"
+#
+# HEADERS = {
+#     "Accept": "application/json",
+#     "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjQ1MjY2MDk2MjQyMTQyNjM2ODAsImF0cCI6MywiZXh0IjoiMTc4MjgxMTg4MiIsImV4cCI6MTc5MDU4Nzg4MiwiaWF0IjoxNzgyODExNTgyfQ.egBjX5cvZdoMmv0D_eTDZnnOzxIpL9Ua7A8l2EF5kq8",
+#     "User-Agent": "Mozilla/5.0",
+#     "Origin": "https://vskit.tv",
+#     "Referer": "https://vskit.tv/",
+#     "X-Client-Info": '{"timezone":"Asia/Karachi"}',
+#     "X-Request-Lang": "en",
+#     "X-Site-Domain": "https://vskit.tv"
+# }
+#
+#
+# # ---------------------------------------------
+# # EPISODE SESSION
+# # ---------------------------------------------
+# SESSION_HEADERS = {
+#     "Accept": "*/*",
+#     "Accept-Language": "en-US,en;q=0.9",
+#     "User-Agent": (
+#         "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:152.0) "
+#         "Gecko/20100101 Firefox/152.0"
+#     ),
+#     "Origin": "https://vskit.tv",
+#     "RSC": "1",
+# }
+#
+# session = requests.Session()
+# session.headers.update(SESSION_HEADERS)
+#
+# COOKIE_STRING = """
+# PASTE_FULL_RAW_COOKIE_HERE
+# """
+#
+# COOKIE_STRING = COOKIE_STRING.replace("…", "")
+# COOKIE_STRING = COOKIE_STRING.encode("ascii", "ignore").decode()
+#
+# for item in COOKIE_STRING.strip().split("; "):
+#     if "=" in item:
+#         key, value = item.split("=", 1)
+#         session.cookies.set(key, value)
+#
+#
+# # ---------------------------------------------
+# # FETCH DRAMA PAGE
+# # ---------------------------------------------
+# def fetch_page(page):
+#     params = {
+#         "page": page,
+#         "perPage": PER_PAGE,
+#         "novelType": 3
+#     }
+#
+#     response = requests.get(
+#         BASE_URL,
+#         headers=HEADERS,
+#         params=params,
+#         timeout=30
+#     )
+#
+#     if response.status_code != 200:
+#         print(f"Failed page {page}")
+#         return []
+#
+#     return response.json().get("data", {}).get("list", [])
+#
+#
+# # ---------------------------------------------
+# # SAVE DRAMA
+# # ---------------------------------------------
+# def save_drama(drama_data):
+#     drama, created = ShortDrama.objects.update_or_create(
+#         subject_id=drama_data.get("subjectId"),
+#         defaults={
+#             "title": drama_data.get("title"),
+#             "slug": drama_data.get("subjectSeoKey"),
+#             "cover": drama_data.get("cover") or {},
+#             "tags": drama_data.get("tags", []),
+#             "total_episodes": drama_data.get("totalEpisode"),
+#             "total_views": drama_data.get("totalViews"),
+#             "description": drama_data.get("description"),
+#             "is_active": True,
+#         }
+#     )
+#
+#     return drama
+#
+#
+# # ---------------------------------------------
+# # EXTRACT EPISODE
+# # ---------------------------------------------
+# # def extract_current_episode(raw_text):
+# #     match = re.search(
+# #         r'"currentEpisode":({.*?"lockStatus":\d+})',
+# #         raw_text
+# #     )
+# #
+# #     if not match:
+# #         return None
+# #
+# #     try:
+# #         return json.loads(match.group(1))
+# #     except:
+# #         return None
+#
+#
 # def extract_current_episode(raw_text):
 #     match = re.search(
 #         r'"currentEpisode":({.*?"lockStatus":\d+})',
@@ -421,70 +436,136 @@ def save_drama(drama_data):
 #     )
 #
 #     if not match:
-#         return None
+#         return None, None
 #
 #     try:
-#         return json.loads(match.group(1))
-#     except:
+#         episode_data = json.loads(match.group(1))
+#     except Exception:
+#         return None, None
+#
+#     metadata = {}
+#
+#     genre = re.search(r'"genre":"([^"]*)"', raw_text)
+#     if genre:
+#         metadata["genre"] = genre.group(1)
+#
+#     country = re.search(r'"countryName":"([^"]*)"', raw_text)
+#     if country:
+#         metadata["countryName"] = country.group(1)
+#
+#     release = re.search(r'"releaseDate":"([^"]*)"', raw_text)
+#     if release:
+#         metadata["releaseDate"] = release.group(1)
+#
+#     return episode_data, metadata
+#
+#
+# def extract_expiry(play_url):
+#     try:
+#         expires = int(
+#             parse_qs(
+#                 urlparse(play_url).query
+#             )["Expires"][0]
+#         )
+#
+#         return datetime.fromtimestamp(
+#             expires,
+#             tz=timezone.utc
+#         )
+#
+#     except Exception:
 #         return None
-
-
-def extract_current_episode(raw_text):
-    match = re.search(
-        r'"currentEpisode":({.*?"lockStatus":\d+})',
-        raw_text
-    )
-
-    if not match:
-        return None, None
-
-    try:
-        episode_data = json.loads(match.group(1))
-    except Exception:
-        return None, None
-
-    metadata = {}
-
-    genre = re.search(r'"genre":"([^"]*)"', raw_text)
-    if genre:
-        metadata["genre"] = genre.group(1)
-
-    country = re.search(r'"countryName":"([^"]*)"', raw_text)
-    if country:
-        metadata["countryName"] = country.group(1)
-
-    release = re.search(r'"releaseDate":"([^"]*)"', raw_text)
-    if release:
-        metadata["releaseDate"] = release.group(1)
-
-    return episode_data, metadata
-
-
-def extract_expiry(play_url):
-    try:
-        expires = int(
-            parse_qs(
-                urlparse(play_url).query
-            )["Expires"][0]
-        )
-
-        return datetime.fromtimestamp(
-            expires,
-            tz=timezone.utc
-        )
-
-    except Exception:
-        return None
-
-# ---------------------------------------------
-# SAVE EPISODE
-# ---------------------------------------------
-# def save_episode(drama, episode_data):
+#
+# # ---------------------------------------------
+# # SAVE EPISODE
+# # ---------------------------------------------
+# # def save_episode(drama, episode_data):
+# #     video = episode_data.get("video") or {}
+# #     video_address = video.get("videoAddress") or {}
+# #     cover = video.get("cover") or {}
+# #     play_url = video_address.get("url")
+# #
+# #     ShortDramaEpisode.objects.update_or_create(
+# #         drama=drama,
+# #         episode_number=episode_data.get("ep"),
+# #         defaults={
+# #             "mini_id": episode_data.get("miniId"),
+# #             "subject_id": episode_data.get("subjectId"),
+# #             "season": episode_data.get("se", 1),
+# #             "play_url": video_address.get("url"),
+# #             "expires_at": extract_expiry(play_url),
+# #             "thumbnail": cover.get("url"),
+# #             "duration": video_address.get("duration"),
+# #             "width": video_address.get("width"),
+# #             "height": video_address.get("height"),
+# #             "file_size": video_address.get("size"),
+# #             "lock_status": episode_data.get("lockStatus", 0),
+# #             "is_active": True,
+# #         }
+# #     )
+#
+#
+# def save_episode(drama, episode_data, metadata=None):
 #     video = episode_data.get("video") or {}
 #     video_address = video.get("videoAddress") or {}
 #     cover = video.get("cover") or {}
 #     play_url = video_address.get("url")
 #
+#     # ----------------------------
+#     # Update drama metadata
+#     # ----------------------------
+#     genres = []
+#
+#     if metadata and (
+#             not drama.genres.exists()
+#             or drama.country_id is None
+#             or drama.release_date is None
+#     ):
+#         genre_string = metadata.get("genre")
+#         if genre_string:
+#             for genre_name in genre_string.split(","):
+#                 genre_name = genre_name.strip()
+#
+#                 if not genre_name:
+#                     continue
+#
+#                 genre, _ = ShortDramaGenre.objects.get_or_create(
+#                     name=genre_name,
+#                     defaults={
+#                         "slug": slugify(genre_name),
+#                     },
+#                 )
+#
+#                 genres.append(genre)
+#
+#         country_name = metadata.get("countryName")
+#         if country_name:
+#             country, _ = ShortDramaCountry.objects.get_or_create(
+#                 name=country_name.strip(),
+#                 defaults={
+#                     "slug": slugify(country_name),
+#                 },
+#             )
+#             drama.country = country
+#
+#         release_date = metadata.get("releaseDate")
+#         if release_date:
+#             try:
+#                 drama.release_date = datetime.strptime(
+#                     release_date,
+#                     "%Y-%m-%d",
+#                 ).date()
+#             except ValueError:
+#                 pass
+#
+#         drama.save(update_fields=["country", "release_date"])
+#
+#         if genres:
+#             drama.genres.set(genres)
+#
+#     # ----------------------------
+#     # Save episode
+#     # ----------------------------
 #     ShortDramaEpisode.objects.update_or_create(
 #         drama=drama,
 #         episode_number=episode_data.get("ep"),
@@ -492,7 +573,7 @@ def extract_expiry(play_url):
 #             "mini_id": episode_data.get("miniId"),
 #             "subject_id": episode_data.get("subjectId"),
 #             "season": episode_data.get("se", 1),
-#             "play_url": video_address.get("url"),
+#             "play_url": play_url,
 #             "expires_at": extract_expiry(play_url),
 #             "thumbnail": cover.get("url"),
 #             "duration": video_address.get("duration"),
@@ -501,221 +582,1814 @@ def extract_expiry(play_url):
 #             "file_size": video_address.get("size"),
 #             "lock_status": episode_data.get("lockStatus", 0),
 #             "is_active": True,
-#         }
+#         },
 #     )
+#
+# # ---------------------------------------------
+# # FETCH EPISODE
+# # ---------------------------------------------
+# def fetch_episode(drama, ep):
+#     url = f"https://vskit.tv/watch/{drama.slug}?ep={ep}"
+#
+#     headers = {
+#         "Referer": f"https://vskit.tv/drama/{drama.slug}",
+#         "Next-Url": f"/en/drama/{drama.slug}",
+#     }
+#
+#     for attempt in range(RETRY_LIMIT):
+#         try:
+#             response = session.get(
+#                 url,
+#                 headers=headers,
+#                 timeout=REQUEST_TIMEOUT
+#             )
+#
+#             if response.status_code != 200:
+#                 time.sleep(2)
+#                 continue
+#
+#             episode_data, metadata = extract_current_episode(response.text)
+#
+#             if episode_data:
+#                 return episode_data, metadata
+#
+#             time.sleep(1)
+#
+#         except:
+#             time.sleep(2)
+#
+#     return None, None
+#
+#
+# # ---------------------------------------------
+# # SCRAPE DRAMA EPISODES
+# # ---------------------------------------------
+# def scrape_drama(drama):
+#     print(f"\nStarting episodes: {drama.title}")
+#
+#     existing_eps = set(
+#         drama.episodes.values_list(
+#             "episode_number",
+#             flat=True
+#         )
+#     )
+#
+#     pending_eps = [
+#         ep for ep in range(1, drama.total_episodes + 1)
+#         if ep not in existing_eps
+#     ]
+#
+#     skipped_eps = []
+#
+#     with ThreadPoolExecutor(max_workers=EPISODE_WORKERS) as executor:
+#         results = executor.map(
+#             lambda ep: (ep, *fetch_episode(drama, ep)),
+#             pending_eps
+#         )
+#
+#         for ep, episode_data, metadata in results:
+#             if not episode_data:
+#                 skipped_eps.append(ep)
+#                 continue
+#
+#             save_episode(drama, episode_data, metadata)
+#
+#             print(f"[{drama.title}] Saved Ep {ep}")
+#             time.sleep(DELAY_BETWEEN_EPISODES)
+#
+#     if skipped_eps:
+#         print(f"Recovery pass: {skipped_eps}")
+#
+#         final_failed = []
+#
+#         for ep in skipped_eps:
+#             episode_data, metadata = fetch_episode(drama, ep)
+#
+#             if episode_data:
+#                 save_episode(drama, episode_data, metadata)
+#                 print(f"[{drama.title}] Recovery saved Ep {ep}")
+#             else:
+#                 print(f"[{drama.title}] Recovery failed Ep {ep}")
+#                 final_failed.append(ep)
+#
+#         if final_failed:
+#             print(
+#                 f"[{drama.title}] Final failed episodes: "
+#                 f"{final_failed}"
+#             )
+#
+#     print(f"Completed: {drama.title}")
+#     print(f"Sleeping {DELAY_BETWEEN_DRAMAS}s...\n")
+#     time.sleep(DELAY_BETWEEN_DRAMAS)
+#
+#
+# # ---------------------------------------------
+# # MAIN PIPELINE
+# # ---------------------------------------------
+# def scrape_all():
+#     seen_ids = set()
+#
+#     for page in range(1, MAX_PAGES + 1):
+#         print(f"\nFetching page {page}")
+#
+#         dramas = fetch_page(page)
+#
+#         for drama_data in dramas:
+#             subject_id = drama_data.get("subjectId")
+#
+#             if subject_id in seen_ids:
+#                 continue
+#
+#             seen_ids.add(subject_id)
+#
+#             drama = save_drama(drama_data)
+#
+#             print(f"Saved drama: {drama.title}")
+#
+#             # Immediately scrape episodes
+#             scrape_drama(drama)
+#
+#         print(f"Sleeping {DELAY_BETWEEN_PAGES}s after page...")
+#         time.sleep(DELAY_BETWEEN_PAGES)
+#
+#
+# # ---------------------------------------------
+# # RUN
+# # ---------------------------------------------
+# if __name__ == "__main__":
+#     print("Starting merged scraper...")
+#     scrape_all()
 
 
-def save_episode(drama, episode_data, metadata=None):
-    video = episode_data.get("video") or {}
-    video_address = video.get("videoAddress") or {}
-    cover = video.get("cover") or {}
-    play_url = video_address.get("url")
 
-    # ----------------------------
-    # Update drama metadata
-    # ----------------------------
-    genres = []
 
-    if metadata and (
-            not drama.genres.exists()
-            or drama.country_id is None
-            or drama.release_date is None
+
+import hashlib
+import json
+import logging
+import os
+import random
+import re
+import string
+import time
+from datetime import datetime, timezone
+from urllib.parse import parse_qs, quote, urlparse
+
+import django
+import requests
+from requests.adapters import HTTPAdapter
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+django.setup()
+
+from django.db import close_old_connections
+from django.utils.text import slugify
+
+from api.models import (
+    ShortDrama,
+    ShortDramaCountry,
+    ShortDramaEpisode,
+    ShortDramaGenre,
+)
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------
+# REQUEST CONFIG
+# --------------------------------------------------
+REQUEST_TIMEOUT = 30
+RETRY_LIMIT = 3
+RETRY_DELAY = 2
+
+WATCH_BASE_URL = "https://vskit.online/watch"
+
+RECOMMEND_API_URL = (
+    "https://h5-api.aoneroom.com/"
+    "wefeed-h5api-bff/vskit/recommend-list"
+)
+
+GENRE_CACHE = {}
+COUNTRY_CACHE = {}
+
+
+# --------------------------------------------------
+# MAIN SCRAPER CONFIG
+# --------------------------------------------------
+MAX_PAGES = 3
+PER_PAGE = 20
+DELAY_BETWEEN_EPISODES = 0.7
+DELAY_BETWEEN_DRAMAS = 5
+DELAY_BETWEEN_PAGES = 5
+
+
+# --------------------------------------------------
+# AUTH
+# --------------------------------------------------
+def normalize_bearer_token(value):
+    value = (value or "").strip()
+
+    if value.lower().startswith("bearer "):
+        value = value[7:].strip()
+
+    return value
+
+
+BEARER_TOKEN = normalize_bearer_token(
+    os.getenv("VSKIT_BEARER_TOKEN", "")
+)
+
+COOKIE_STRING = os.getenv(
+    "VSKIT_COOKIE_STRING",
+    "",
+)
+
+
+# --------------------------------------------------
+# EXCEPTIONS
+# --------------------------------------------------
+class DramaUnavailableError(Exception):
+    """Raised when VSKit returns an empty watch page for a drama."""
+
+
+# --------------------------------------------------
+# HELPERS
+# --------------------------------------------------
+def safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def random_rsc_value(length=8):
+    alphabet = (
+        string.ascii_lowercase
+        + string.digits
+    )
+
+    return "".join(
+        random.choice(alphabet)
+        for _ in range(length)
+    )
+
+
+def extract_expiry(play_url):
+    if not play_url:
+        return None
+
+    try:
+        query = parse_qs(
+            urlparse(play_url).query
+        )
+
+        values = (
+            query.get("Expires")
+            or query.get("expires")
+            or query.get("expire")
+        )
+
+        if not values:
+            return None
+
+        return datetime.fromtimestamp(
+            int(values[0]),
+            tz=timezone.utc,
+        )
+
+    except (
+        TypeError,
+        ValueError,
+        OverflowError,
+        IndexError,
     ):
-        genre_string = metadata.get("genre")
-        if genre_string:
-            for genre_name in genre_string.split(","):
-                genre_name = genre_name.strip()
+        return None
 
-                if not genre_name:
-                    continue
 
-                genre, _ = ShortDramaGenre.objects.get_or_create(
-                    name=genre_name,
-                    defaults={
-                        "slug": slugify(genre_name),
-                    },
-                )
-
-                genres.append(genre)
-
-        country_name = metadata.get("countryName")
-        if country_name:
-            country, _ = ShortDramaCountry.objects.get_or_create(
-                name=country_name.strip(),
-                defaults={
-                    "slug": slugify(country_name),
+# --------------------------------------------------
+# NEXT.JS ROUTER STATE
+# --------------------------------------------------
+def build_next_router_state_tree(drama_slug):
+    state = [
+        "",
+        {
+            "children": [
+                ["locale", "en", "d"],
+                {
+                    "children": [
+                        "watch",
+                        {
+                            "children": [
+                                [
+                                    "slug",
+                                    drama_slug,
+                                    "d",
+                                ],
+                                {
+                                    "children": [
+                                        "__PAGE__",
+                                        {},
+                                        None,
+                                        "refetch",
+                                    ]
+                                },
+                                None,
+                                None,
+                            ]
+                        },
+                        None,
+                        None,
+                    ]
                 },
-            )
-            drama.country = country
+                None,
+                None,
+            ]
+        },
+        None,
+        None,
+    ]
 
-        release_date = metadata.get("releaseDate")
-        if release_date:
-            try:
-                drama.release_date = datetime.strptime(
-                    release_date,
-                    "%Y-%m-%d",
-                ).date()
-            except ValueError:
-                pass
+    compact_json = json.dumps(
+        state,
+        separators=(",", ":"),
+    )
 
-        drama.save(update_fields=["country", "release_date"])
+    return quote(
+        compact_json,
+        safe="",
+    )
 
-        if genres:
-            drama.genres.set(genres)
 
-    # ----------------------------
-    # Save episode
-    # ----------------------------
-    ShortDramaEpisode.objects.update_or_create(
-        drama=drama,
-        episode_number=episode_data.get("ep"),
-        defaults={
-            "mini_id": episode_data.get("miniId"),
-            "subject_id": episode_data.get("subjectId"),
-            "season": episode_data.get("se", 1),
-            "play_url": play_url,
-            "expires_at": extract_expiry(play_url),
-            "thumbnail": cover.get("url"),
-            "duration": video_address.get("duration"),
-            "width": video_address.get("width"),
-            "height": video_address.get("height"),
-            "file_size": video_address.get("size"),
-            "lock_status": episode_data.get("lockStatus", 0),
-            "is_active": True,
+# --------------------------------------------------
+# SESSION
+# --------------------------------------------------
+def build_session():
+    http_session = requests.Session()
+
+    http_session.headers.update(
+        {
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(X11; Ubuntu; Linux x86_64; rv:152.0) "
+                "Gecko/20100101 Firefox/152.0"
+            ),
+            "Origin": "https://vskit.online",
+            "Referer": "https://vskit.online/",
+            "RSC": "1",
+            "Priority": "u=4",
+        }
+    )
+
+    if BEARER_TOKEN:
+        http_session.headers[
+            "Authorization"
+        ] = f"Bearer {BEARER_TOKEN}"
+
+    adapter = HTTPAdapter(
+        pool_connections=10,
+        pool_maxsize=10,
+        max_retries=0,
+    )
+
+    http_session.mount(
+        "https://",
+        adapter,
+    )
+
+    found_token_cookie = False
+
+    cookie_text = (
+        COOKIE_STRING
+        .replace("…", "")
+        .encode("ascii", "ignore")
+        .decode()
+    )
+
+    for item in cookie_text.split(";"):
+        item = item.strip()
+
+        if "=" not in item:
+            continue
+
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not key:
+            continue
+
+        if key == "token":
+            found_token_cookie = True
+
+        http_session.cookies.set(
+            key,
+            value,
+            domain="vskit.online",
+            path="/",
+        )
+
+    if BEARER_TOKEN and not found_token_cookie:
+        http_session.cookies.set(
+            "token",
+            BEARER_TOKEN,
+            domain="vskit.online",
+            path="/",
+        )
+
+        logger.warning(
+            "No token cookie was found in VSKIT_COOKIE_STRING; "
+            "a token cookie was created from VSKIT_BEARER_TOKEN."
+        )
+
+    logger.info(
+        "Session bearer=%s cookie_string=%s cookie_names=%s",
+        bool(BEARER_TOKEN),
+        bool(COOKIE_STRING.strip()),
+        list(http_session.cookies.keys()),
+    )
+
+    return http_session
+
+
+session = build_session()
+
+
+# --------------------------------------------------
+# RSC PARSING
+# --------------------------------------------------
+def extract_json_object_after_key(
+    raw_text,
+    key,
+):
+    marker = re.search(
+        rf'"{re.escape(key)}"\s*:\s*',
+        raw_text,
+    )
+
+    if not marker:
+        return None
+
+    start = marker.end()
+
+    while (
+        start < len(raw_text)
+        and raw_text[start].isspace()
+    ):
+        start += 1
+
+    if (
+        start >= len(raw_text)
+        or raw_text[start] != "{"
+    ):
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index in range(
+        start,
+        len(raw_text),
+    ):
+        char = raw_text[index]
+
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+
+            if depth == 0:
+                return raw_text[
+                    start:index + 1
+                ]
+
+    return None
+
+
+def extract_json_string(
+    raw_text,
+    key,
+):
+    match = re.search(
+        rf'"{re.escape(key)}"\s*:\s*'
+        r'("(?:\\.|[^"\\])*")',
+        raw_text,
+    )
+
+    if not match:
+        return None
+
+    try:
+        return json.loads(
+            match.group(1)
+        )
+    except json.JSONDecodeError:
+        return None
+
+
+def extract_json_integer(
+    raw_text,
+    key,
+):
+    match = re.search(
+        rf'"{re.escape(key)}"\s*:\s*(-?\d+)',
+        raw_text,
+    )
+
+    if not match:
+        return None
+
+    return safe_int(
+        match.group(1),
+        default=None,
+    )
+
+
+def extract_json_array(
+    raw_text,
+    key,
+):
+    marker = re.search(
+        rf'"{re.escape(key)}"\s*:\s*',
+        raw_text,
+    )
+
+    if not marker:
+        return None
+
+    start = marker.end()
+
+    while (
+        start < len(raw_text)
+        and raw_text[start].isspace()
+    ):
+        start += 1
+
+    if (
+        start >= len(raw_text)
+        or raw_text[start] != "["
+    ):
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index in range(
+        start,
+        len(raw_text),
+    ):
+        char = raw_text[index]
+
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+
+            if depth == 0:
+                try:
+                    value = json.loads(
+                        raw_text[
+                            start:index + 1
+                        ]
+                    )
+
+                    return (
+                        value
+                        if isinstance(
+                            value,
+                            list,
+                        )
+                        else None
+                    )
+
+                except json.JSONDecodeError:
+                    return None
+
+    return None
+
+
+def extract_episode_and_metadata(
+    raw_text,
+):
+    current_episode_text = (
+        extract_json_object_after_key(
+            raw_text,
+            "currentEpisode",
+        )
+    )
+
+    if not current_episode_text:
+        return None, {}
+
+    try:
+        episode_data = json.loads(
+            current_episode_text
+        )
+
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Could not decode currentEpisode: %s",
+            exc,
+        )
+
+        return None, {}
+
+    metadata = {
+        "genre": extract_json_string(
+            raw_text,
+            "genre",
+        ),
+        "countryName": extract_json_string(
+            raw_text,
+            "countryName",
+        ),
+        "releaseDate": extract_json_string(
+            raw_text,
+            "releaseDate",
+        ),
+        "description": extract_json_string(
+            raw_text,
+            "description",
+        ),
+        "dramaTitle": extract_json_string(
+            raw_text,
+            "dramaTitle",
+        ),
+        "subjectSeoKey": extract_json_string(
+            raw_text,
+            "subjectSeoKey",
+        ),
+        "totalEpisode": extract_json_integer(
+            raw_text,
+            "totalEpisode",
+        ),
+        "tags": extract_json_array(
+            raw_text,
+            "tags",
+        ),
+    }
+
+    return (
+        episode_data,
+        {
+            key: value
+            for key, value in metadata.items()
+            if value is not None
         },
     )
 
-# ---------------------------------------------
-# FETCH EPISODE
-# ---------------------------------------------
-def fetch_episode(drama, ep):
-    url = f"https://vskit.tv/watch/{drama.slug}?ep={ep}"
 
-    headers = {
-        "Referer": f"https://vskit.tv/drama/{drama.slug}",
-        "Next-Url": f"/en/drama/{drama.slug}",
+def is_empty_watch_page(
+    raw_text,
+    episode_number,
+):
+    empty_title = (
+        f"Watch  Episode {episode_number} - VSKit | VSKit"
+        in raw_text
+    )
+
+    empty_description = (
+        f"Stream  episode {episode_number} free in HD on VSKit."
+        in raw_text
+    )
+
+    return (
+        empty_title
+        and empty_description
+        and "currentEpisode" not in raw_text
+    )
+
+
+# --------------------------------------------------
+# FETCH EPISODE
+# --------------------------------------------------
+def fetch_rsc_episode(
+    drama,
+    episode_number,
+):
+    base_url = (
+        f"{WATCH_BASE_URL}/"
+        f"{drama.slug}"
+    )
+
+    params = {
+        "ep": episode_number,
+        "_rsc": random_rsc_value(),
     }
 
-    for attempt in range(RETRY_LIMIT):
+    visible_url = (
+        f"{base_url}?ep={episode_number}"
+    )
+
+    headers = {
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": visible_url,
+        "Next-Url": (
+            f"/en/watch/{drama.slug}"
+            f"?ep={episode_number}"
+        ),
+        "Next-Router-State-Tree": (
+            build_next_router_state_tree(
+                drama.slug
+            )
+        ),
+        "RSC": "1",
+        "Priority": "u=4",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+
+    for attempt in range(
+        1,
+        RETRY_LIMIT + 1,
+    ):
         try:
             response = session.get(
-                url,
+                base_url,
+                params=params,
                 headers=headers,
-                timeout=REQUEST_TIMEOUT
+                timeout=REQUEST_TIMEOUT,
+                allow_redirects=True,
+            )
+
+            content_type = (
+                response.headers.get(
+                    "Content-Type",
+                    "",
+                )
+            )
+
+            body_hash = hashlib.sha256(
+                response.content
+            ).hexdigest()[:16]
+
+            logger.info(
+                "[%s] Episode %s | attempt=%s | "
+                "status=%s | content-type=%s | "
+                "length=%s | sha256=%s | final-url=%s",
+                drama.title,
+                episode_number,
+                attempt,
+                response.status_code,
+                content_type,
+                len(response.content),
+                body_hash,
+                response.url,
             )
 
             if response.status_code != 200:
-                time.sleep(2)
+                logger.warning(
+                    "[%s] Episode %s returned HTTP %s: %s",
+                    drama.title,
+                    episode_number,
+                    response.status_code,
+                    response.text[:500],
+                )
+
+                time.sleep(
+                    RETRY_DELAY * attempt
+                )
+
                 continue
 
-            episode_data, metadata = extract_current_episode(response.text)
+            episode_data, metadata = (
+                extract_episode_and_metadata(
+                    response.text
+                )
+            )
 
             if episode_data:
+                returned_episode = safe_int(
+                    episode_data.get("ep"),
+                    default=0,
+                )
+
+                if (
+                    returned_episode
+                    != int(episode_number)
+                ):
+                    logger.warning(
+                        "[%s] Requested episode %s "
+                        "but received episode %s.",
+                        drama.title,
+                        episode_number,
+                        returned_episode,
+                    )
+
+                    time.sleep(
+                        RETRY_DELAY * attempt
+                    )
+
+                    continue
+
                 return episode_data, metadata
 
-            time.sleep(1)
+            if is_empty_watch_page(
+                response.text,
+                episode_number,
+            ):
+                raise DramaUnavailableError(
+                    f"VSKit returned an empty watch page "
+                    f"for slug={drama.slug}"
+                )
 
-        except:
-            time.sleep(2)
+            logger.warning(
+                "[%s] Episode %s not found in RSC response "
+                "(%s/%s). preview=%r",
+                drama.title,
+                episode_number,
+                attempt,
+                RETRY_LIMIT,
+                response.text[:500],
+            )
 
-    return None, None
+        except DramaUnavailableError:
+            raise
+
+        except requests.Timeout:
+            logger.warning(
+                "[%s] Episode %s timed out "
+                "on attempt %s/%s.",
+                drama.title,
+                episode_number,
+                attempt,
+                RETRY_LIMIT,
+            )
+
+        except requests.RequestException as exc:
+            logger.warning(
+                "[%s] Episode %s request error: %s",
+                drama.title,
+                episode_number,
+                exc,
+            )
+
+        time.sleep(
+            RETRY_DELAY * attempt
+        )
+
+    return None, {}
 
 
-# ---------------------------------------------
-# SCRAPE DRAMA EPISODES
-# ---------------------------------------------
-def scrape_drama(drama):
-    print(f"\nStarting episodes: {drama.title}")
+# --------------------------------------------------
+# METADATA
+# --------------------------------------------------
+def get_or_create_genre(
+    genre_name,
+):
+    genre_name = (
+        genre_name or ""
+    ).strip()
 
-    existing_eps = set(
-        drama.episodes.values_list(
-            "episode_number",
-            flat=True
+    if not genre_name:
+        return None
+
+    cache_key = genre_name.casefold()
+
+    if cache_key in GENRE_CACHE:
+        return GENRE_CACHE[
+            cache_key
+        ]
+
+    genre = (
+        ShortDramaGenre.objects
+        .filter(
+            name__iexact=genre_name,
+        )
+        .first()
+    )
+
+    if genre is None:
+        genre = (
+            ShortDramaGenre.objects
+            .create(
+                name=genre_name,
+                slug=slugify(
+                    genre_name
+                ),
+            )
+        )
+
+    GENRE_CACHE[cache_key] = genre
+
+    return genre
+
+
+def get_or_create_country(
+    country_name,
+):
+    country_name = (
+        country_name or ""
+    ).strip()
+
+    if not country_name:
+        return None
+
+    cache_key = country_name.casefold()
+
+    if cache_key in COUNTRY_CACHE:
+        return COUNTRY_CACHE[
+            cache_key
+        ]
+
+    country = (
+        ShortDramaCountry.objects
+        .filter(
+            name__iexact=country_name,
+        )
+        .first()
+    )
+
+    if country is None:
+        country = (
+            ShortDramaCountry.objects
+            .create(
+                name=country_name,
+                slug=slugify(
+                    country_name
+                ),
+            )
+        )
+
+    COUNTRY_CACHE[cache_key] = country
+
+    return country
+
+
+def update_drama_metadata(
+    drama,
+    metadata,
+):
+    if not metadata:
+        return False
+
+    changed = False
+    update_fields = []
+
+    country_name = metadata.get(
+        "countryName"
+    )
+
+    if (
+        drama.country_id is None
+        and country_name
+    ):
+        country = get_or_create_country(
+            country_name
+        )
+
+        if country:
+            drama.country = country
+            update_fields.append(
+                "country"
+            )
+            changed = True
+
+            logger.info(
+                "[%s] Added country: %s",
+                drama.title,
+                country.name,
+            )
+
+    release_date_value = metadata.get(
+        "releaseDate"
+    )
+
+    if (
+        drama.release_date is None
+        and release_date_value
+    ):
+        try:
+            release_date = (
+                datetime.strptime(
+                    release_date_value,
+                    "%Y-%m-%d",
+                )
+                .date()
+            )
+
+            drama.release_date = (
+                release_date
+            )
+            update_fields.append(
+                "release_date"
+            )
+            changed = True
+
+            logger.info(
+                "[%s] Added release date: %s",
+                drama.title,
+                release_date,
+            )
+
+        except ValueError:
+            logger.warning(
+                "[%s] Invalid release date: %r",
+                drama.title,
+                release_date_value,
+            )
+
+    description = metadata.get(
+        "description"
+    )
+
+    if (
+        not drama.description
+        and description
+    ):
+        drama.description = description
+        update_fields.append(
+            "description"
+        )
+        changed = True
+
+    total_episode = safe_int(
+        metadata.get(
+            "totalEpisode"
+        ),
+        default=0,
+    )
+
+    if (
+        total_episode > 0
+        and drama.total_episodes
+        != total_episode
+    ):
+        drama.total_episodes = (
+            total_episode
+        )
+        update_fields.append(
+            "total_episodes"
+        )
+        changed = True
+
+    tags = metadata.get("tags")
+
+    if tags and not drama.tags:
+        drama.tags = tags
+        update_fields.append("tags")
+        changed = True
+
+    if update_fields:
+        drama.save(
+            update_fields=list(
+                dict.fromkeys(
+                    update_fields
+                )
+            )
+        )
+
+    if not drama.genres.exists():
+        genre_string = metadata.get(
+            "genre"
+        )
+
+        if genre_string:
+            normalized = (
+                genre_string
+                .replace("|", ",")
+                .replace("/", ",")
+                .replace(";", ",")
+            )
+
+            genres = []
+
+            for genre_name in (
+                normalized.split(",")
+            ):
+                genre = get_or_create_genre(
+                    genre_name
+                )
+
+                if genre:
+                    genres.append(genre)
+
+            if genres:
+                unique_genres = {
+                    genre.pk: genre
+                    for genre in genres
+                }
+
+                drama.genres.set(
+                    unique_genres.values()
+                )
+
+                changed = True
+
+                logger.info(
+                    "[%s] Added genres: %s",
+                    drama.title,
+                    ", ".join(
+                        genre.name
+                        for genre
+                        in unique_genres.values()
+                    ),
+                )
+
+    return changed
+
+
+# --------------------------------------------------
+# SAVE EPISODE
+# --------------------------------------------------
+def save_episode(
+    drama,
+    episode_data,
+    metadata=None,
+):
+    episode_number = safe_int(
+        episode_data.get("ep"),
+        default=0,
+    )
+
+    if episode_number <= 0:
+        logger.error(
+            "[%s] Invalid episode number: %r",
+            drama.title,
+            episode_data.get("ep"),
+        )
+
+        return False
+
+    if metadata:
+        update_drama_metadata(
+            drama,
+            metadata,
+        )
+
+    video = (
+        episode_data.get("video")
+        or {}
+    )
+
+    video_address = (
+        video.get("videoAddress")
+        or {}
+    )
+
+    cover = (
+        video.get("cover")
+        or {}
+    )
+
+    play_url = (
+        video_address.get("url")
+    )
+
+    _, created = (
+        ShortDramaEpisode.objects
+        .update_or_create(
+            drama=drama,
+            episode_number=episode_number,
+            defaults={
+                "mini_id": (
+                    episode_data.get(
+                        "miniId"
+                    )
+                ),
+                "subject_id": (
+                    episode_data.get(
+                        "subjectId"
+                    )
+                    or drama.subject_id
+                ),
+                "season": safe_int(
+                    episode_data.get(
+                        "se"
+                    ),
+                    default=1,
+                ),
+                "play_url": play_url,
+                "expires_at": (
+                    extract_expiry(
+                        play_url
+                    )
+                ),
+                "thumbnail": (
+                    cover.get("url")
+                ),
+                "duration": safe_int(
+                    video_address.get(
+                        "duration"
+                    ),
+                    default=0,
+                ),
+                "width": safe_int(
+                    video_address.get(
+                        "width"
+                    ),
+                    default=0,
+                ),
+                "height": safe_int(
+                    video_address.get(
+                        "height"
+                    ),
+                    default=0,
+                ),
+                "file_size": safe_int(
+                    video_address.get(
+                        "size"
+                    ),
+                    default=0,
+                ),
+                "lock_status": safe_int(
+                    episode_data.get(
+                        "lockStatus"
+                    ),
+                    default=0,
+                ),
+                "is_active": True,
+            },
         )
     )
 
-    pending_eps = [
-        ep for ep in range(1, drama.total_episodes + 1)
-        if ep not in existing_eps
-    ]
+    logger.info(
+        "[%s] %s episode %s",
+        drama.title,
+        (
+            "Created"
+            if created
+            else "Updated"
+        ),
+        episode_number,
+    )
 
-    skipped_eps = []
+    return True
 
-    with ThreadPoolExecutor(max_workers=EPISODE_WORKERS) as executor:
-        results = executor.map(
-            lambda ep: (ep, *fetch_episode(drama, ep)),
-            pending_eps
+
+# --------------------------------------------------
+# RECOMMENDATION API
+# --------------------------------------------------
+def request_json(
+    url,
+    params=None,
+    description="request",
+):
+    if not BEARER_TOKEN:
+        raise RuntimeError(
+            "VSKIT_BEARER_TOKEN is required "
+            "for the recommendation API."
         )
 
-        for ep, episode_data, metadata in results:
-            if not episode_data:
-                skipped_eps.append(ep)
+    headers = {
+        "Accept": "application/json",
+        "Authorization": (
+            f"Bearer {BEARER_TOKEN}"
+        ),
+        "Origin": "https://vskit.online",
+        "Referer": "https://vskit.online/",
+        "X-Client-Info": (
+            '{"timezone":"Asia/Karachi"}'
+        ),
+        "X-Request-Lang": "en",
+        "X-Site-Domain": (
+            "https://vskit.online"
+        ),
+    }
+
+    for attempt in range(
+        1,
+        RETRY_LIMIT + 1,
+    ):
+        try:
+            response = session.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+            )
+
+            logger.info(
+                "%s | attempt=%s | status=%s",
+                description,
+                attempt,
+                response.status_code,
+            )
+
+            if response.status_code == 401:
+                logger.error(
+                    "Bearer token is missing or expired."
+                )
+                return None
+
+            if response.status_code == 429:
+                retry_after = safe_int(
+                    response.headers.get(
+                        "Retry-After"
+                    ),
+                    RETRY_DELAY * attempt,
+                )
+
+                time.sleep(
+                    retry_after
+                )
                 continue
 
-            save_episode(drama, episode_data, metadata)
+            if response.status_code != 200:
+                logger.warning(
+                    "%s returned HTTP %s: %s",
+                    description,
+                    response.status_code,
+                    response.text[:500],
+                )
 
-            print(f"[{drama.title}] Saved Ep {ep}")
-            time.sleep(DELAY_BETWEEN_EPISODES)
+                time.sleep(
+                    RETRY_DELAY * attempt
+                )
+                continue
 
-    if skipped_eps:
-        print(f"Recovery pass: {skipped_eps}")
+            try:
+                payload = response.json()
+
+            except requests.exceptions.JSONDecodeError as exc:
+                logger.warning(
+                    "%s returned invalid JSON: %s",
+                    description,
+                    exc,
+                )
+
+                time.sleep(
+                    RETRY_DELAY * attempt
+                )
+                continue
+
+            if payload.get("code") not in (
+                None,
+                0,
+            ):
+                logger.warning(
+                    "%s API error code=%s message=%s",
+                    description,
+                    payload.get("code"),
+                    payload.get("message"),
+                )
+
+                time.sleep(
+                    RETRY_DELAY * attempt
+                )
+                continue
+
+            return payload
+
+        except requests.RequestException as exc:
+            logger.warning(
+                "%s failed on attempt %s/%s: %s",
+                description,
+                attempt,
+                RETRY_LIMIT,
+                exc,
+            )
+
+        time.sleep(
+            RETRY_DELAY * attempt
+        )
+
+    return None
+
+
+def fetch_page(
+    page,
+):
+    payload = request_json(
+        RECOMMEND_API_URL,
+        params={
+            "page": page,
+            "perPage": PER_PAGE,
+            "novelType": 3,
+        },
+        description=(
+            f"Fetch drama page {page}"
+        ),
+    )
+
+    if not payload:
+        return []
+
+    data = payload.get("data") or {}
+    dramas = data.get("list") or []
+
+    return (
+        dramas
+        if isinstance(dramas, list)
+        else []
+    )
+
+
+# --------------------------------------------------
+# DRAMA SAVE
+# --------------------------------------------------
+def save_drama(
+    drama_data,
+):
+    subject_id = drama_data.get(
+        "subjectId"
+    )
+
+    slug = drama_data.get(
+        "subjectSeoKey"
+    )
+
+    if not subject_id or not slug:
+        raise ValueError(
+            "Drama is missing subjectId "
+            "or subjectSeoKey."
+        )
+
+    drama, created = (
+        ShortDrama.objects
+        .update_or_create(
+            subject_id=subject_id,
+            defaults={
+                "title": (
+                    drama_data.get("title")
+                    or ""
+                ),
+                "slug": slug,
+                "cover": (
+                    drama_data.get("cover")
+                    or {}
+                ),
+                "tags": (
+                    drama_data.get("tags")
+                    or []
+                ),
+                "total_episodes": safe_int(
+                    drama_data.get(
+                        "totalEpisode"
+                    ),
+                    default=0,
+                ),
+                "total_views": (
+                    drama_data.get(
+                        "totalViews"
+                    )
+                ),
+                "description": (
+                    drama_data.get(
+                        "description"
+                    )
+                    or ""
+                ),
+                "is_active": True,
+            },
+        )
+    )
+
+    logger.info(
+        "%s drama: %s | episodes=%s",
+        (
+            "Created"
+            if created
+            else "Updated"
+        ),
+        drama.title,
+        drama.total_episodes,
+    )
+
+    return drama
+
+
+# --------------------------------------------------
+# SCRAPE ONE DRAMA
+# --------------------------------------------------
+def mark_drama_inactive(
+    drama,
+    reason,
+):
+    if drama.is_active:
+        drama.is_active = False
+        drama.save(
+            update_fields=[
+                "is_active",
+            ]
+        )
+
+    logger.error(
+        "[%s] Marked inactive: %s",
+        drama.title,
+        reason,
+    )
+
+
+def scrape_drama(
+    drama,
+):
+    total_episodes = safe_int(
+        drama.total_episodes,
+        default=0,
+    )
+
+    if total_episodes <= 0:
+        logger.warning(
+            "[%s] Invalid total episode count.",
+            drama.title,
+        )
+        return
+
+    existing = set(
+        drama.episodes.values_list(
+            "episode_number",
+            flat=True,
+        )
+    )
+
+    pending = [
+        episode_number
+        for episode_number in range(
+            1,
+            total_episodes + 1,
+        )
+        if episode_number
+        not in existing
+    ]
+
+    if not pending:
+        logger.info(
+            "[%s] All %s episodes already exist.",
+            drama.title,
+            total_episodes,
+        )
+
+        if (
+            drama.country_id is None
+            or drama.release_date is None
+            or not drama.genres.exists()
+        ):
+            try:
+                episode_data, metadata = (
+                    fetch_rsc_episode(
+                        drama,
+                        1,
+                    )
+                )
+
+            except DramaUnavailableError as exc:
+                mark_drama_inactive(
+                    drama,
+                    str(exc),
+                )
+                return
+
+            if episode_data and metadata:
+                update_drama_metadata(
+                    drama,
+                    metadata,
+                )
+
+        return
+
+    logger.info(
+        "[%s] Existing=%s pending=%s total=%s",
+        drama.title,
+        len(existing),
+        len(pending),
+        total_episodes,
+    )
+
+    failed = []
+
+    for episode_number in pending:
+        try:
+            episode_data, metadata = (
+                fetch_rsc_episode(
+                    drama,
+                    episode_number,
+                )
+            )
+
+        except DramaUnavailableError as exc:
+            mark_drama_inactive(
+                drama,
+                str(exc),
+            )
+            return
+
+        if not episode_data:
+            failed.append(
+                episode_number
+            )
+            continue
+
+        try:
+            save_episode(
+                drama,
+                episode_data,
+                metadata,
+            )
+
+        except Exception:
+            logger.exception(
+                "[%s] Failed saving episode %s",
+                drama.title,
+                episode_number,
+            )
+
+            failed.append(
+                episode_number
+            )
+
+        time.sleep(
+            DELAY_BETWEEN_EPISODES
+        )
+
+    if failed:
+        logger.info(
+            "[%s] Recovery pass for episodes: %s",
+            drama.title,
+            failed,
+        )
 
         final_failed = []
 
-        for ep in skipped_eps:
-            episode_data, metadata = fetch_episode(drama, ep)
+        for episode_number in failed:
+            try:
+                episode_data, metadata = (
+                    fetch_rsc_episode(
+                        drama,
+                        episode_number,
+                    )
+                )
 
-            if episode_data:
-                save_episode(drama, episode_data, metadata)
-                print(f"[{drama.title}] Recovery saved Ep {ep}")
-            else:
-                print(f"[{drama.title}] Recovery failed Ep {ep}")
-                final_failed.append(ep)
+            except DramaUnavailableError as exc:
+                mark_drama_inactive(
+                    drama,
+                    str(exc),
+                )
+                return
 
-        if final_failed:
-            print(
-                f"[{drama.title}] Final failed episodes: "
-                f"{final_failed}"
-            )
-
-    print(f"Completed: {drama.title}")
-    print(f"Sleeping {DELAY_BETWEEN_DRAMAS}s...\n")
-    time.sleep(DELAY_BETWEEN_DRAMAS)
-
-
-# ---------------------------------------------
-# MAIN PIPELINE
-# ---------------------------------------------
-def scrape_all():
-    seen_ids = set()
-
-    for page in range(1, MAX_PAGES + 1):
-        print(f"\nFetching page {page}")
-
-        dramas = fetch_page(page)
-
-        for drama_data in dramas:
-            subject_id = drama_data.get("subjectId")
-
-            if subject_id in seen_ids:
+            if not episode_data:
+                final_failed.append(
+                    episode_number
+                )
                 continue
 
-            seen_ids.add(subject_id)
+            try:
+                save_episode(
+                    drama,
+                    episode_data,
+                    metadata,
+                )
 
-            drama = save_drama(drama_data)
+            except Exception:
+                logger.exception(
+                    "[%s] Recovery save failed "
+                    "for episode %s",
+                    drama.title,
+                    episode_number,
+                )
 
-            print(f"Saved drama: {drama.title}")
+                final_failed.append(
+                    episode_number
+                )
 
-            # Immediately scrape episodes
-            scrape_drama(drama)
+            time.sleep(
+                DELAY_BETWEEN_EPISODES
+            )
 
-        print(f"Sleeping {DELAY_BETWEEN_PAGES}s after page...")
-        time.sleep(DELAY_BETWEEN_PAGES)
+        if final_failed:
+            logger.error(
+                "[%s] Final failed episodes: %s",
+                drama.title,
+                final_failed,
+            )
+
+    final_count = (
+        drama.episodes
+        .filter(
+            episode_number__gte=1,
+            episode_number__lte=(
+                total_episodes
+            ),
+        )
+        .count()
+    )
+
+    logger.info(
+        "[%s] Stored %s/%s episodes.",
+        drama.title,
+        final_count,
+        total_episodes,
+    )
 
 
-# ---------------------------------------------
-# RUN
-# ---------------------------------------------
+# --------------------------------------------------
+# SCRAPE ALL
+# --------------------------------------------------
+def scrape_all():
+    seen_subject_ids = set()
+
+    for page in range(
+        1,
+        MAX_PAGES + 1,
+    ):
+        dramas = fetch_page(
+            page
+        )
+
+        if not dramas:
+            logger.info(
+                "No dramas returned for page %s.",
+                page,
+            )
+            break
+
+        for drama_data in dramas:
+            subject_id = drama_data.get(
+                "subjectId"
+            )
+
+            if (
+                not subject_id
+                or subject_id
+                in seen_subject_ids
+            ):
+                continue
+
+            seen_subject_ids.add(
+                subject_id
+            )
+
+            try:
+                drama = save_drama(
+                    drama_data
+                )
+
+                scrape_drama(
+                    drama
+                )
+
+            except Exception:
+                logger.exception(
+                    "Failed processing drama %r",
+                    (
+                        drama_data.get("title")
+                        or subject_id
+                    ),
+                )
+
+            finally:
+                close_old_connections()
+
+            time.sleep(
+                DELAY_BETWEEN_DRAMAS
+            )
+
+        if page < MAX_PAGES:
+            time.sleep(
+                DELAY_BETWEEN_PAGES
+            )
+
+
 if __name__ == "__main__":
-    print("Starting merged scraper...")
-    scrape_all()
+    logger.info(
+        "Starting VSKit short-drama scraper."
+    )
+
+    try:
+        scrape_all()
+
+    except KeyboardInterrupt:
+        logger.info(
+            "Scraper stopped by user."
+        )
+
+    finally:
+        session.close()
+        close_old_connections()
+
+        logger.info(
+            "Scraper finished."
+        )
