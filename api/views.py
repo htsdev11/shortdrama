@@ -40,7 +40,7 @@ class AllShortDramaView(APIView):
                     to_attr="ordered_episodes",
                 )
             )
-            .order_by("title")
+            .order_by("?")
         )
 
         paginator = CustomPagination()
