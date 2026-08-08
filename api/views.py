@@ -14,16 +14,57 @@ from api.serializers import ShortDramaListSerializer, ShortDramaDetailSerializer
 
 
 CACHE_TIMEOUT = 60 * 60 * 24
+# class AllShortDramaView(APIView):
+#     authentication_classes = [TokenAuthentication]
+#     permission_classes = [IsAuthenticated]
+#
+#     def get(self, request):
+#         cache_key = f"all_short_dramas_{request.GET.urlencode()}"
+#         cached_data = cache.get(cache_key)
+#         if cached_data is not None:
+#             return Response(cached_data)
+#
+#         queryset = (
+#             ShortDrama.objects.filter(
+#                 is_active=True
+#             )
+#             .prefetch_related(
+#                 Prefetch(
+#                     "episodes",
+#                     queryset=ShortDramaEpisode.objects.only(
+#                         "episode_number",
+#                         "play_url",
+#                         "thumbnail",
+#                         "duration"
+#                     ).order_by("episode_number"),
+#                     to_attr="ordered_episodes",
+#                 )
+#             )
+#             .order_by("?")
+#         )
+#
+#         paginator = CustomPagination()
+#         page = paginator.paginate_queryset(
+#             queryset,
+#             request,
+#         )
+#
+#         serializer = ShortDramaListSerializer(
+#             page,
+#             many=True,
+#         )
+#
+#         response = paginator.get_paginated_response(
+#             serializer.data
+#         )
+#         cache.set(cache_key, response.data, CACHE_TIMEOUT)
+#         return response
+
 class AllShortDramaView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        cache_key = f"all_short_dramas_{request.GET.urlencode()}"
-        cached_data = cache.get(cache_key)
-        if cached_data is not None:
-            return Response(cached_data)
-
         queryset = (
             ShortDrama.objects.filter(
                 is_active=True
@@ -44,21 +85,14 @@ class AllShortDramaView(APIView):
         )
 
         paginator = CustomPagination()
-        page = paginator.paginate_queryset(
-            queryset,
-            request,
-        )
+        page = paginator.paginate_queryset(queryset, request)
 
         serializer = ShortDramaListSerializer(
             page,
             many=True,
         )
 
-        response = paginator.get_paginated_response(
-            serializer.data
-        )
-        cache.set(cache_key, response.data, CACHE_TIMEOUT)
-        return response
+        return paginator.get_paginated_response(serializer.data)
 
 class ShortDramaByIDView(APIView):
     authentication_classes = [TokenAuthentication]
