@@ -13,7 +13,7 @@ from api.pagination import CustomPagination
 from api.serializers import ShortDramaListSerializer, ShortDramaDetailSerializer, ShortDramaForyouSerializer
 
 
-CACHE_TIMEOUT = 60 * 60 * 24
+CACHE_TIMEOUT = 60 * 60
 # class AllShortDramaView(APIView):
 #     authentication_classes = [TokenAuthentication]
 #     permission_classes = [IsAuthenticated]
@@ -169,10 +169,10 @@ class ShortDramaByNameView(APIView):
         try:
             drama = (
                 ShortDrama.objects.prefetch_related("episodes")
-                .get(
-                    title__iexact=title,
+                .filter(
+                    title__icontains=title,
                     is_active=True,
-                )
+                ).first()
             )
 
             serializer = ShortDramaDetailSerializer(drama)
@@ -599,3 +599,29 @@ class ShortDramaSortingFilters(APIView):
         )
 
         return paginator.get_paginated_response(serializer.data)
+
+class ShortDramaTopPicksView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        queryset = (
+            ShortDrama.objects
+            .filter(is_active=True)
+            .prefetch_related("genres")
+            .select_related("country")
+            .order_by("?")[:100]
+        )
+
+        serializer = ShortDramaListSerializer(
+            queryset,
+            many=True
+        )
+
+        response_data = {
+            "status": "success",
+            "message": "Top picks fetched successfully",
+            "data": serializer.data,
+        }
+
+        return Response(response_data)

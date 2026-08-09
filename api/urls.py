@@ -3,7 +3,7 @@ from django.urls import path
 from api.views import AllShortDramaView, ShortDramaByIDView, ShortDramaByNameView, ShortDramaForyouView, \
     ShortDramaForyouByCategoryView, EveryoneWatchingView, HomepageBannerAPIView, ShortDramaByGenreView, \
     ShortDramaByCountryView, ShortDramaByReleaseYearView, ShortDramaFiltersAPIView, ShortDramaGenreListView, \
-    ShortDramaCountryListView, ShortDramaReleaseYearListView, ShortDramaSortingFilters
+    ShortDramaCountryListView, ShortDramaReleaseYearListView, ShortDramaSortingFilters, ShortDramaTopPicksView
 
 urlpatterns = [
 
@@ -21,6 +21,7 @@ urlpatterns = [
     path("short-drama/country/",ShortDramaByCountryView.as_view(),name="short-drama-by-country",),
     path("short-drama/year/",ShortDramaByReleaseYearView.as_view(),name="short-drama-by-release-year",),
     path("sort/", ShortDramaSortingFilters.as_view(), name="short-drama-sorting", ),
+    path("sort/top_pick", ShortDramaTopPicksView.as_view(), name="short-drama-sorting", ),
 
     path("short-drama/foryou/", ShortDramaForyouView.as_view(),),
     path("short-drama/foryou/category/",ShortDramaForyouByCategoryView.as_view(),),

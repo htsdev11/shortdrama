@@ -801,7 +801,7 @@ def normalize_bearer_token(value):
 
 
 BEARER_TOKEN = normalize_bearer_token(
-    os.getenv("VSKIT_BEARER_TOKEN", "")
+    os.getenv("VSKIT_BEARER_TOKEN", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjQ2Mjg4NjM1NjEzNTAyNDQzNDQsImF0cCI6MywiZXh0IjoiMTc4NjE5OTgyOCIsImV4cCI6MTc5Mzk3NTgyOCwiaWF0IjoxNzg2MTk5NTI4fQ.D3f4vFQwICvmyl8L7Qijv3SPEnZdsn_2xv0F-cwqOl0")
 )
 
 COOKIE_STRING = os.getenv(
