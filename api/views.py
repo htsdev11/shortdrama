@@ -605,11 +605,30 @@ class ShortDramaTopPicksView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # queryset = (
+        #     ShortDrama.objects
+        #     .filter(is_active=True)
+        #     .prefetch_related("genres")
+        #     .select_related("country")
+        #     .order_by("?")[:100]
+        # )
+
         queryset = (
-            ShortDrama.objects
-            .filter(is_active=True)
-            .prefetch_related("genres")
-            .select_related("country")
+            ShortDrama.objects.filter(
+                is_active=True
+            )
+            .prefetch_related(
+                Prefetch(
+                    "episodes",
+                    queryset=ShortDramaEpisode.objects.only(
+                        "episode_number",
+                        "play_url",
+                        "thumbnail",
+                        "duration"
+                    ).order_by("episode_number"),
+                    to_attr="ordered_episodes",
+                )
+            )
             .order_by("?")[:100]
         )
 
