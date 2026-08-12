@@ -600,23 +600,58 @@ class ShortDramaSortingFilters(APIView):
 
         return paginator.get_paginated_response(serializer.data)
 
+# class ShortDramaTopPicksView(APIView):
+#     authentication_classes = [TokenAuthentication]
+#     permission_classes = [IsAuthenticated]
+#
+#     def get(self, request):
+#         # queryset = (
+#         #     ShortDrama.objects
+#         #     .filter(is_active=True)
+#         #     .prefetch_related("genres")
+#         #     .select_related("country")
+#         #     .order_by("?")[:100]
+#         # )
+#
+#         queryset = (
+#             ShortDrama.objects.filter(
+#                 is_active=True
+#             )
+#             .prefetch_related(
+#                 Prefetch(
+#                     "episodes",
+#                     queryset=ShortDramaEpisode.objects.only(
+#                         "episode_number",
+#                         "play_url",
+#                         "thumbnail",
+#                         "duration"
+#                     ).order_by("episode_number"),
+#                     to_attr="ordered_episodes",
+#                 )
+#             )
+#             .order_by("?")[:100]
+#         )
+#
+#         serializer = ShortDramaListSerializer(
+#             queryset,
+#             many=True
+#         )
+#
+#         response_data = {
+#             "status": "success",
+#             "message": "Top picks fetched successfully",
+#             "data": serializer.data,
+#         }
+#
+#         return Response(response_data)
+
 class ShortDramaTopPicksView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # queryset = (
-        #     ShortDrama.objects
-        #     .filter(is_active=True)
-        #     .prefetch_related("genres")
-        #     .select_related("country")
-        #     .order_by("?")[:100]
-        # )
-
         queryset = (
-            ShortDrama.objects.filter(
-                is_active=True
-            )
+            ShortDrama.objects.filter(is_active=True)
             .prefetch_related(
                 Prefetch(
                     "episodes",
@@ -632,15 +667,16 @@ class ShortDramaTopPicksView(APIView):
             .order_by("?")[:100]
         )
 
+        paginator = CustomPagination()
+        paginated_qs = paginator.paginate_queryset(queryset, request)
+
         serializer = ShortDramaListSerializer(
-            queryset,
+            paginated_qs,
             many=True
         )
 
-        response_data = {
+        return paginator.get_paginated_response({
             "status": "success",
             "message": "Top picks fetched successfully",
             "data": serializer.data,
-        }
-
-        return Response(response_data)
+        })
