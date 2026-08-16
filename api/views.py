@@ -172,10 +172,10 @@ class ShortDramaByNameView(APIView):
                 .filter(
                     title__icontains=title,
                     is_active=True,
-                ).first()
+                )
             )
 
-            serializer = ShortDramaDetailSerializer(drama)
+            serializer = ShortDramaDetailSerializer(drama, many=True)
 
             response_data = {
                 "status": "success",
