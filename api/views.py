@@ -144,55 +144,113 @@ class ShortDramaByIDView(APIView):
                 status=404,
             )
 
+# class ShortDramaByNameView(APIView):
+#     authentication_classes = [TokenAuthentication]
+#     permission_classes = [IsAuthenticated]
+#
+#     def get(self, request):
+#         title = request.GET.get("title")
+#
+#         if not title:
+#             return Response(
+#                 {
+#                     "status": "error",
+#                     "message": "title is required",
+#                     "data": {},
+#                 },
+#                 status=400,
+#             )
+#
+#         cache_key = f"short_drama_name_{title}"
+#         cached_data = cache.get(cache_key)
+#         if cached_data is not None:
+#             return Response(cached_data)
+#
+#         try:
+#             drama = (
+#                 ShortDrama.objects.prefetch_related("episodes")
+#                 .filter(
+#                     title__icontains=title,
+#                     is_active=True,
+#                 )
+#             )
+#
+#             serializer = ShortDramaDetailSerializer(drama, many=True)
+#
+#             response_data = {
+#                 "status": "success",
+#                 "message": "Short drama fetched successfully",
+#                 "data": serializer.data,
+#             }
+#             cache.set(cache_key, response_data, CACHE_TIMEOUT)
+#             return Response(response_data)
+#
+#         except ShortDrama.DoesNotExist:
+#             return Response(
+#                 {
+#                     "status": "error",
+#                     "message": "Short drama not found",
+#                     "data": {},
+#                 },
+#                 status=404,
+#             )
+
 class ShortDramaByNameView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        title = request.GET.get("title")
-
-        if not title:
-            return Response(
-                {
-                    "status": "error",
-                    "message": "title is required",
-                    "data": {},
-                },
-                status=400,
-            )
-
-        cache_key = f"short_drama_name_{title}"
-        cached_data = cache.get(cache_key)
-        if cached_data is not None:
-            return Response(cached_data)
-
         try:
-            drama = (
-                ShortDrama.objects.prefetch_related("episodes")
+            title = request.GET.get("title")
+
+            if not title:
+                return Response(
+                    {
+                        "status": "error",
+                        "message": "title is required",
+                        "data": {},
+                    },
+                    status=400,
+                )
+
+            dramas = (
+                ShortDrama.objects
+                .prefetch_related("episodes")
                 .filter(
                     title__icontains=title,
                     is_active=True,
                 )
+                .order_by("title")
             )
 
-            serializer = ShortDramaDetailSerializer(drama, many=True)
+            if not dramas.exists():
+                return Response(
+                    {
+                        "status": "error",
+                        "message": "No drama found",
+                        "data": {},
+                    },
+                    status=404,
+                )
 
-            response_data = {
-                "status": "success",
-                "message": "Short drama fetched successfully",
-                "data": serializer.data,
-            }
-            cache.set(cache_key, response_data, CACHE_TIMEOUT)
-            return Response(response_data)
+            paginator = CustomPagination()
+            page = paginator.paginate_queryset(dramas, request)
 
-        except ShortDrama.DoesNotExist:
+            serializer = ShortDramaDetailSerializer(
+                page,
+                many=True
+            )
+
+            return paginator.get_paginated_response(serializer.data)
+
+        except Exception:
             return Response(
                 {
                     "status": "error",
-                    "message": "Short drama not found",
+                    "message": "Something went wrong",
                     "data": {},
                 },
-                status=404,
+                status=500,
             )
 
 class ShortDramaForyouView(APIView):
